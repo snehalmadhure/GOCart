@@ -3,3 +3,12 @@ dist/
 .env
 .env.local
 .remote-inspect/
+
+# Local runtime artifacts
+*.db
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/

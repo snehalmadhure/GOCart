@@ -1,0 +1,14 @@
+[
+  {"item": "milk", "quantity": 1, "date": "2026-05-02", "unit": "carton", "unit_price": 68, "expires_in_days": 5},
+  {"item": "bread", "quantity": 1, "date": "2026-05-03", "unit": "loaf", "unit_price": 45, "expires_in_days": 4},
+  {"item": "eggs", "quantity": 1, "date": "2026-05-04", "unit": "dozen", "unit_price": 90, "expires_in_days": 14},
+  {"item": "milk", "quantity": 1, "date": "2026-05-06", "unit": "carton", "unit_price": 68, "expires_in_days": 5},
+  {"item": "bread", "quantity": 1, "date": "2026-05-08", "unit": "loaf", "unit_price": 45, "expires_in_days": 4},
+  {"item": "milk", "quantity": 1, "date": "2026-05-10", "unit": "carton", "unit_price": 68, "expires_in_days": 5},
+  {"item": "eggs", "quantity": 1, "date": "2026-05-11", "unit": "dozen", "unit_price": 90, "expires_in_days": 14},
+  {"item": "bread", "quantity": 1, "date": "2026-05-13", "unit": "loaf", "unit_price": 45, "expires_in_days": 4},
+  {"item": "milk", "quantity": 2, "date": "2026-05-14", "unit": "carton", "unit_price": 68, "expires_in_days": 5},
+  {"item": "bread", "quantity": 1, "date": "2026-05-18", "unit": "loaf", "unit_price": 45, "expires_in_days": 4},
+  {"item": "milk", "quantity": 1, "date": "2026-05-22", "unit": "carton", "unit_price": 68, "expires_in_days": 5},
+  {"item": "eggs", "quantity": 1, "date": "2026-05-19", "unit": "dozen", "unit_price": 90, "expires_in_days": 14}
+]
