@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -56,6 +56,48 @@ def create_purchase(payload: PurchaseCreate, db: Session = Depends(get_db)) -> P
     refresh_pantry_item(db, item.id)
     build_or_update_reminder_batch(db)
     return _to_response(purchase)
+
+
+@router.put("/{purchase_id}", response_model=PurchaseRead)
+def update_purchase(purchase_id: int, payload: PurchaseCreate, db: Session = Depends(get_db)) -> PurchaseRead:
+    """Update a purchase and refresh both affected pantry items."""
+
+    purchase = db.get(Purchase, purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    previous_item_id = purchase.item_id
+    item = db.scalar(select(Item).where(Item.name_key == _name_key(payload.item_name)))
+    if item is None:
+        item = Item(name=payload.item_name, name_key=_name_key(payload.item_name), default_unit=payload.unit)
+        db.add(item)
+        db.flush()
+    purchase.item_id = item.id
+    purchase.quantity = payload.quantity
+    purchase.unit = payload.unit
+    purchase.purchased_at = payload.purchased_at
+    purchase.expires_at = payload.expires_at
+    db.commit()
+    db.refresh(purchase)
+    purchase.item = item
+    refresh_pantry_item(db, previous_item_id)
+    if item.id != previous_item_id:
+        refresh_pantry_item(db, item.id)
+    build_or_update_reminder_batch(db)
+    return _to_response(purchase)
+
+
+@router.delete("/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_purchase(purchase_id: int, db: Session = Depends(get_db)) -> None:
+    """Remove an incorrectly logged purchase and recalculate its pantry item."""
+
+    purchase = db.get(Purchase, purchase_id)
+    if purchase is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase not found")
+    item_id = purchase.item_id
+    db.delete(purchase)
+    db.commit()
+    refresh_pantry_item(db, item_id)
+    build_or_update_reminder_batch(db)
 
 
 @router.get("", response_model=list[PurchaseRead])

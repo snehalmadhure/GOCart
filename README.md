@@ -56,6 +56,54 @@ POST   /api/shopping-list/:id/confirm
 
 The API contracts tolerate extra backend fields; page-specific mock data in `src/data/mockData.js` demonstrates the expected core shapes.
 
+## Full-stack development
+
+The repository now has three connected layers:
+
+```text
+React frontend (src/) → FastAPI backend (backend/) → Pantry ML package (ai-ml/)
+```
+
+The backend imports the repository-local `ai-ml/pantry_restock_agent` package
+through `backend/app/services/prediction.py`. Purchase logging refreshes pantry
+state with the ML forecast; generated shopping lists use the ML pantry-aware
+list generator.
+
+Start the backend in one terminal:
+
+```powershell
+cd backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload
+```
+
+In a second terminal, set `VITE_USE_MOCK_API=false` in a root `.env` file and
+start the frontend:
+
+```powershell
+npm run dev
+```
+
+The frontend sends all live requests to `/api/v1/*` and maps responses to its
+display models in `src/services/backendMappers.js`. Keep mock mode enabled when
+you only want a frontend design demo without the backend running.
+
+### Verification
+
+Run each Python project from its own directory/environment:
+
+```powershell
+# backend
+cd backend
+.\.venv\Scripts\python.exe -m pytest -q
+
+# ML package
+cd ..\ai-ml
+python -m pytest -q
+
+# frontend (from repository root)
+npm run build
+```
+
 ## Structure
 
 ```text

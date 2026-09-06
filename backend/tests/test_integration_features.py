@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from tests.test_pantry import create_purchase, pantry_at
+from tests.test_pantry import create_purchase, pantry_at, to_json_time
 
 
 def test_prediction_failure_retains_the_last_successful_pantry_state(client, monkeypatch):
@@ -61,6 +61,51 @@ def test_generated_list_rejects_an_empty_intent(client):
     response = client.post("/api/v1/shopping-lists/generate", json={"intent": ""})
 
     assert response.status_code == 422
+
+
+def test_purchase_can_be_updated_and_deleted_for_frontend_history_actions(client):
+    now = datetime.now(timezone.utc)
+    created = client.post(
+        "/api/v1/purchases",
+        json={
+            "item_name": "Milk",
+            "quantity": "1",
+            "unit": "litre",
+            "purchased_at": to_json_time(now),
+        },
+    )
+    purchase_id = created.json()["id"]
+
+    updated = client.put(
+        f"/api/v1/purchases/{purchase_id}",
+        json={
+            "item_name": "Bread",
+            "quantity": "2",
+            "unit": "loaf",
+            "purchased_at": to_json_time(now),
+        },
+    )
+    deleted = client.delete(f"/api/v1/purchases/{purchase_id}")
+
+    assert updated.status_code == 200
+    assert updated.json()["item_name"] == "Bread"
+    assert updated.json()["unit"] == "loaf"
+    assert deleted.status_code == 204
+    assert client.get("/api/v1/purchases").json() == []
+
+
+def test_reminder_can_be_snoozed_for_frontend_action(client):
+    now = datetime.now(timezone.utc)
+    create_purchase(client, "Bread", "9", now - timedelta(days=3))
+    create_purchase(client, "Bread", "1", now - timedelta(days=2))
+    pantry_at(client, now)
+    batch_id = client.get("/api/v1/restock-alerts").json()[0]["id"]
+
+    response = client.post(f"/api/v1/restock-alerts/{batch_id}/snooze", json={"days": 3})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "snoozed"
+    assert client.get("/api/v1/restock-alerts").json()[0]["status"] == "snoozed"
 
 
 def test_health_endpoint_allows_the_local_react_origin(client):

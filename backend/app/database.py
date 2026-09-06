@@ -8,7 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
-DATABASE_URL = os.getenv("GOCART_DATABASE_URL", "sqlite:///./gocart.db")
+default_database_url = "sqlite:////tmp/gocart.db" if os.getenv("VERCEL") else "sqlite:///./gocart.db"
+DATABASE_URL = os.getenv("GOCART_DATABASE_URL", default_database_url)
 
 
 class Base(DeclarativeBase):
