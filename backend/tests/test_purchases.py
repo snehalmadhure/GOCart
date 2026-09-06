@@ -43,12 +43,12 @@ def test_list_purchases_can_filter_and_paginates(client):
 
 def test_purchase_rejects_invalid_payloads(client):
     negative = client.post("/api/v1/purchases", json=purchase_payload(quantity="0"))
-    unsupported_unit = client.post("/api/v1/purchases", json=purchase_payload(unit="box"))
+    blank_unit = client.post("/api/v1/purchases", json=purchase_payload(unit=" "))
     invalid_dates = client.post(
         "/api/v1/purchases",
         json=purchase_payload(expires_at="2026-09-04T09:00:00Z"),
     )
 
     assert negative.status_code == 422
-    assert unsupported_unit.status_code == 422
+    assert blank_unit.status_code == 422
     assert invalid_dates.status_code == 422

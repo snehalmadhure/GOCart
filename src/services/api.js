@@ -1,5 +1,7 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-export const useMockApi = import.meta.env.VITE_USE_MOCK_API !== 'false'
+// Local development sets VITE_API_BASE_URL. On Vercel, use the same deployed
+// origin so the browser reaches the co-located FastAPI function at /api/v1.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+export const useMockApi = import.meta.env.VITE_USE_MOCK_API === 'true'
 
 export async function request(path, options = {}) {
   const response = await fetch(`${BASE_URL}${path}`, { headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options })

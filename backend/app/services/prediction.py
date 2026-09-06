@@ -1,16 +1,24 @@
-"""Temporary consumption-estimation adapter.
-
-This module is the only boundary that Phase 4 should replace with functions
-from ``ml/``. Its implementation is intentionally simple and deterministic.
-"""
+"""Adapter between persisted backend data and the repository's ML package."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
+from pathlib import Path
+import sys
 
 from app.models import Purchase
+
+
+# ``ai-ml`` is a sibling directory rather than an installed dependency. Add it
+# once so both Uvicorn and pytest can use the same repository-local ML package.
+ML_PACKAGE_ROOT = Path(__file__).resolve().parents[3] / "ai-ml"
+if str(ML_PACKAGE_ROOT) not in sys.path:
+    sys.path.insert(0, str(ML_PACKAGE_ROOT))
+
+from pantry_restock_agent.forecasting import forecast_restocks  # noqa: E402
+from pantry_restock_agent.shopping import generate_pantry_aware_shopping_list  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -30,6 +38,7 @@ class SuggestedItem:
     quantity: Decimal
     unit: str
     reason: str
+    pantry_warning: str | None = None
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -37,52 +46,62 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def estimate_consumption(purchases: list[Purchase], as_of: datetime) -> ConsumptionEstimate:
-    """Estimate usage from the time between the oldest and newest purchases.
-
-    At least two purchases using one unit are required. The newest purchase is
-    treated as the current refill; earlier purchases establish average daily
-    use. This is a temporary estimator, not a production forecasting model.
-    """
+    """Use the ML package's robust, recency-weighted forecast for one item."""
 
     if len(purchases) < 2 or len({purchase.unit for purchase in purchases}) != 1:
         return ConsumptionEstimate(None, None, None, None, "insufficient_history")
 
-    ordered = sorted(purchases, key=lambda purchase: _as_utc(purchase.purchased_at))
-    first_at = _as_utc(ordered[0].purchased_at)
-    latest = ordered[-1]
-    latest_at = _as_utc(latest.purchased_at)
-    elapsed_between_purchases = Decimal(str((latest_at - first_at).total_seconds())) / Decimal("86400")
-    if elapsed_between_purchases <= 0:
-        return ConsumptionEstimate(None, None, None, None, "insufficient_history")
-
-    consumed_quantity = sum((purchase.quantity for purchase in ordered[:-1]), start=Decimal("0"))
-    daily_usage = consumed_quantity / elapsed_between_purchases
-    if daily_usage <= 0:
-        return ConsumptionEstimate(None, None, None, None, "insufficient_history")
-
-    elapsed_since_latest = max(
-        Decimal("0"),
-        Decimal(str((_as_utc(as_of) - latest_at).total_seconds())) / Decimal("86400"),
+    item_name = purchases[0].item.name
+    ml_purchases = [
+        {
+            "item": item_name,
+            "quantity": float(purchase.quantity),
+            "date": _as_utc(purchase.purchased_at).date().isoformat(),
+            "unit": purchase.unit,
+        }
+        for purchase in purchases
+    ]
+    forecast = forecast_restocks(ml_purchases, today=_as_utc(as_of).date())[0]
+    run_out_at = datetime.combine(forecast.runout_date, datetime.min.time(), tzinfo=timezone.utc)
+    return ConsumptionEstimate(
+        estimated_quantity=Decimal(str(forecast.estimated_quantity_left)),
+        daily_usage=Decimal(str(1 / forecast.days_per_unit)),
+        days_left=Decimal(str(forecast.days_left)),
+        run_out_at=run_out_at,
+        confidence="ml",
     )
-    remaining_quantity = max(Decimal("0"), latest.quantity - daily_usage * elapsed_since_latest)
-    days_left = remaining_quantity / daily_usage
-    run_out_at = _as_utc(as_of) + timedelta(seconds=float(days_left * Decimal("86400")))
-    return ConsumptionEstimate(remaining_quantity, daily_usage, days_left, run_out_at, "low")
 
 
 def generate_list(intent: str, pantry_items: list[object]) -> list[SuggestedItem]:
-    """Generate a deterministic starter list until the ML model is integrated.
+    """Generate an ML pantry-aware list using current backend pantry states."""
 
-    ``pantry_items`` remains part of the contract even though the temporary
-    implementation does not reason over it. Phase 4 can replace this function
-    directly with the ML teammate's implementation.
-    """
-
-    normalized_intent = intent.casefold()
-    if "pasta" in normalized_intent:
-        return [
-            SuggestedItem("pasta", Decimal("1"), "pack", "needed for pasta"),
-            SuggestedItem("tomato sauce", Decimal("1"), "pack", "needed for pasta sauce"),
-            SuggestedItem("garlic", Decimal("1"), "pack", "needed for pasta seasoning"),
-        ]
-    return [SuggestedItem("milk", Decimal("1"), "litre", "general pantry staple")]
+    ml_pantry = [
+        {
+            "item": state.item.name,
+            "estimated_quantity_left": float(state.estimated_quantity or 0),
+            "status": "ok" if state.status == "in_stock" else state.status,
+        }
+        for state in pantry_items
+    ]
+    result = generate_pantry_aware_shopping_list(intent, ml_pantry)
+    suggestions: list[SuggestedItem] = []
+    for row in result["needs_to_buy"]:
+        suggestions.append(
+            SuggestedItem(
+                item_name=row["item"],
+                quantity=Decimal(str(row["quantity"])),
+                unit=row["unit"],
+                reason="Suggested by the pantry restock model",
+            )
+        )
+    for row in result["already_have"]:
+        suggestions.append(
+            SuggestedItem(
+                item_name=row["item"],
+                quantity=Decimal(str(row["quantity"])),
+                unit=row["unit"],
+                reason="Already available in the pantry",
+                pantry_warning=row["nudge"],
+            )
+        )
+    return suggestions

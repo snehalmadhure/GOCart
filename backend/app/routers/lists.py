@@ -60,7 +60,8 @@ def generate_shopping_list(
                 quantity=suggestion.quantity,
                 unit=suggestion.unit,
                 reason=suggestion.reason,
-                pantry_warning=(
+                pantry_warning=suggestion.pantry_warning
+                or (
                     "Already sufficiently stocked in your pantry — still add it?"
                     if suggestion.item_name.casefold() in well_stocked
                     else None
