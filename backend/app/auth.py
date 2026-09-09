@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import logging
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -10,6 +11,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
+logger = logging.getLogger(__name__)
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme)) -> str:
@@ -23,6 +25,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(
     try:
         claims = jwt.decode(credentials.credentials, secret, algorithms=["HS256"], audience="authenticated")
     except jwt.PyJWTError as error:
+        logger.warning("Rejected Supabase access token: %s", error)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired access token") from error
     user_id = claims.get("sub")
     if not isinstance(user_id, str) or not user_id:

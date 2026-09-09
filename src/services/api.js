@@ -10,7 +10,11 @@ export async function request(path, options = {}) {
   if (response.status === 401 && !useMockApi) {
     // A session from an earlier deployment or an expired Supabase token must
     // never leave the UI on a protected page that can no longer load data.
-    await supabase?.auth.signOut()
+    try {
+      await supabase?.auth.signOut()
+    } finally {
+      window.location.assign('/login')
+    }
     throw new Error('Your session has expired. Please sign in again.')
   }
   if (!response.ok) throw new Error('The service is temporarily unavailable.')
