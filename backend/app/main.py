@@ -33,13 +33,20 @@ app.include_router(pantry_router)
 app.include_router(alerts_router)
 app.include_router(lists_router)
 
-cors_origins = [origin.strip() for origin in os.getenv("GOCART_CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()]
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "GOCART_CORS_ORIGINS",
+        "http://localhost:5173,https://gocart-kashish-43dd.vercel.app",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 

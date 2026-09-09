@@ -5,6 +5,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/health",
+      "destination": "/api/index.py"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index.py"
     },
