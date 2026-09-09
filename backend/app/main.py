@@ -10,7 +10,7 @@ from app.database import Base, engine
 from app.routers.alerts import router as alerts_router
 from app.routers.lists import router as lists_router
 from app.routers.pantry import router as pantry_router
-from app.routers.purchases import router as purchases_router
+from app.routers.purchases import import_router, router as purchases_router
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(purchases_router)
+app.include_router(import_router)
 app.include_router(pantry_router)
 app.include_router(alerts_router)
 app.include_router(lists_router)

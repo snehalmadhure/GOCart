@@ -52,3 +52,10 @@ def test_purchase_rejects_invalid_payloads(client):
     assert negative.status_code == 422
     assert blank_unit.status_code == 422
     assert invalid_dates.status_code == 422
+
+
+def test_import_history_returns_empty_status_until_a_source_is_connected(client):
+    response = client.post("/api/purchases/import")
+
+    assert response.status_code == 200
+    assert response.json() == {"found": 0, "ready": 0, "review": 0}

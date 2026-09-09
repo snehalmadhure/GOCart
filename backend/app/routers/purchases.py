@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -14,6 +15,13 @@ from app.services.reminders import build_or_update_reminder_batch
 
 
 router = APIRouter(prefix="/api/v1/purchases", tags=["purchases"])
+import_router = APIRouter(prefix="/api/purchases", tags=["purchases"])
+
+
+class PurchaseImportRead(BaseModel):
+    found: int
+    ready: int
+    review: int
 
 
 def _name_key(name: str) -> str:
@@ -30,6 +38,18 @@ def _to_response(purchase: Purchase) -> PurchaseRead:
         purchased_at=purchase.purchased_at,
         expires_at=purchase.expires_at,
     )
+
+
+@import_router.post("/import", response_model=PurchaseImportRead)
+def import_purchase_history() -> PurchaseImportRead:
+    """Provide the frontend's import-status contract until a source is connected.
+
+    The current browser request contains neither a selected file nor source
+    credentials, so it cannot safely import records yet. Returning a completed
+    zero-result lets the UI render its review state instead of receiving a 404.
+    """
+
+    return PurchaseImportRead(found=0, ready=0, review=0)
 
 
 @router.post("", response_model=PurchaseRead, status_code=status.HTTP_201_CREATED)
