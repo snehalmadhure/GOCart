@@ -21,17 +21,17 @@ def _as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
-def refresh_pantry_item(db: Session, item_id: int, as_of: datetime | None = None) -> PantryState:
+def refresh_pantry_item(db: Session, user_id: str, item_id: int, as_of: datetime | None = None) -> PantryState:
     """Calculate and persist a fresh inventory state for one item."""
 
     calculated_at = _as_utc(as_of or datetime.now(timezone.utc))
     purchases = db.scalars(
-        select(Purchase).where(Purchase.item_id == item_id).order_by(Purchase.purchased_at)
+        select(Purchase).where(Purchase.user_id == user_id, Purchase.item_id == item_id).order_by(Purchase.purchased_at)
     ).all()
-    state = db.get(PantryState, item_id)
+    state = db.get(PantryState, {"user_id": user_id, "item_id": item_id})
     is_new_state = state is None
     if state is None:
-        state = PantryState(item_id=item_id, status="unknown", last_calculated_at=calculated_at)
+        state = PantryState(user_id=user_id, item_id=item_id, status="unknown", last_calculated_at=calculated_at)
         db.add(state)
 
     # A newer refill replaces the older stock for this first-pass inventory
@@ -75,8 +75,8 @@ def refresh_pantry_item(db: Session, item_id: int, as_of: datetime | None = None
     return state
 
 
-def refresh_all_pantry_states(db: Session, as_of: datetime | None = None) -> list[PantryState]:
+def refresh_all_pantry_states(db: Session, user_id: str, as_of: datetime | None = None) -> list[PantryState]:
     """Refresh every tracked item and return the resulting states."""
 
-    item_ids = db.scalars(select(Purchase.item_id).distinct()).all()
-    return [refresh_pantry_item(db, item_id, as_of) for item_id in item_ids]
+    item_ids = db.scalars(select(Purchase.item_id).where(Purchase.user_id == user_id).distinct()).all()
+    return [refresh_pantry_item(db, user_id, item_id, as_of) for item_id in item_ids]

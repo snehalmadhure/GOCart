@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
+from app.auth import get_current_user
 from app.models import ReminderBatch, ReminderBatchItem
 
 
@@ -57,11 +58,12 @@ def _to_response(batch: ReminderBatch) -> ReminderBatchRead:
 def list_restock_alerts(
     include_dismissed: bool = False,
     db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
 ) -> list[ReminderBatchRead]:
     """Return grouped reminders created during pantry refreshes."""
     statement = select(ReminderBatch).options(
         joinedload(ReminderBatch.items).joinedload(ReminderBatchItem.item)
-    ).order_by(ReminderBatch.created_at.desc(), ReminderBatch.id.desc())
+    ).where(ReminderBatch.user_id == user_id).order_by(ReminderBatch.created_at.desc(), ReminderBatch.id.desc())
     if not include_dismissed:
         statement = statement.where(ReminderBatch.status.in_(["pending", "snoozed"]))
     batches = db.execute(statement).unique().scalars().all()
@@ -69,13 +71,13 @@ def list_restock_alerts(
 
 
 @router.post("/{batch_id}/dismiss", response_model=ReminderBatchRead)
-def dismiss_restock_alert(batch_id: int, db: Session = Depends(get_db)) -> ReminderBatchRead:
+def dismiss_restock_alert(batch_id: int, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)) -> ReminderBatchRead:
     """Dismiss one pending reminder batch without deleting its audit trail."""
 
     batch = db.scalar(
         select(ReminderBatch)
         .options(joinedload(ReminderBatch.items).joinedload(ReminderBatchItem.item))
-        .where(ReminderBatch.id == batch_id)
+        .where(ReminderBatch.id == batch_id, ReminderBatch.user_id == user_id)
     )
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder batch not found")
@@ -89,13 +91,13 @@ def dismiss_restock_alert(batch_id: int, db: Session = Depends(get_db)) -> Remin
 
 
 @router.post("/{batch_id}/snooze", response_model=ReminderBatchRead)
-def snooze_restock_alert(batch_id: int, payload: SnoozeRequest, db: Session = Depends(get_db)) -> ReminderBatchRead:
+def snooze_restock_alert(batch_id: int, payload: SnoozeRequest, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)) -> ReminderBatchRead:
     """Postpone a reminder while retaining the batched items."""
 
     batch = db.scalar(
         select(ReminderBatch)
         .options(joinedload(ReminderBatch.items).joinedload(ReminderBatchItem.item))
-        .where(ReminderBatch.id == batch_id)
+        .where(ReminderBatch.id == batch_id, ReminderBatch.user_id == user_id)
     )
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reminder batch not found")

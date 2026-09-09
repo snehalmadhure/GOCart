@@ -59,3 +59,16 @@ def test_import_history_returns_empty_status_until_a_source_is_connected(client)
 
     assert response.status_code == 200
     assert response.json() == {"found": 0, "ready": 0, "review": 0}
+
+
+def test_user_cannot_read_or_modify_another_users_purchase(client):
+    from .conftest import USER_B, auth_headers
+
+    created = client.post("/api/v1/purchases", json=purchase_payload())
+    purchase_id = created.json()["id"]
+
+    assert client.get("/api/v1/purchases", headers=auth_headers(USER_B)).json() == []
+    assert client.put(
+        f"/api/v1/purchases/{purchase_id}", json=purchase_payload(quantity="2"), headers=auth_headers(USER_B)
+    ).status_code == 404
+    assert client.delete(f"/api/v1/purchases/{purchase_id}", headers=auth_headers(USER_B)).status_code == 404

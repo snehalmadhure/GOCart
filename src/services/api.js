@@ -4,10 +4,13 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 export const useMockApi = import.meta.env.VITE_USE_MOCK_API === 'true'
 
 export async function request(path, options = {}) {
-  const response = await fetch(`${BASE_URL}${path}`, { headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }, ...options })
+  const session = useMockApi ? null : (await supabase?.auth.getSession())?.data.session
+  const headers = { 'Content-Type': 'application/json', ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}), ...(options.headers || {}) }
+  const response = await fetch(`${BASE_URL}${path}`, { ...options, headers })
   if (!response.ok) throw new Error('The service is temporarily unavailable.')
   return response.status === 204 ? null : response.json()
 }
 
 export const pause = (ms = 450) => new Promise(resolve => setTimeout(resolve, ms))
 export const copy = (data) => JSON.parse(JSON.stringify(data))
+import { supabase } from './supabase'

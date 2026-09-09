@@ -51,7 +51,7 @@ export const toUiReminder = (batch) => ({
 })
 
 export const toUiShoppingList = (result) => ({
-  id: crypto.randomUUID(),
+  id: String(result.id ?? crypto.randomUUID()),
   intent: result.intent,
   freeDeliveryThreshold: 199,
   items: result.items.map(item => ({

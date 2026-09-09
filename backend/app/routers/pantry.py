@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
+from app.auth import get_current_user
 from app.models import PantryState
 from app.services.pantry import refresh_all_pantry_states
 from app.services.reminders import build_or_update_reminder_batch
@@ -43,12 +44,13 @@ def get_pantry(
     status: PantryStatus | Literal["all"] = "all",
     as_of: datetime | None = Query(default=None, description="Optional calculation time, useful for testing."),
     db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
 ) -> PantryRead:
     """Return freshly calculated virtual-pantry state for every known item."""
 
-    refresh_all_pantry_states(db, as_of)
-    build_or_update_reminder_batch(db, as_of)
-    statement = select(PantryState).options(joinedload(PantryState.item)).order_by(PantryState.item_id)
+    refresh_all_pantry_states(db, user_id, as_of)
+    build_or_update_reminder_batch(db, user_id, as_of)
+    statement = select(PantryState).options(joinedload(PantryState.item)).where(PantryState.user_id == user_id).order_by(PantryState.item_id)
     if status != "all":
         statement = statement.where(PantryState.status == status)
     states = db.scalars(statement).all()

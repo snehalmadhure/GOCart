@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
+from app.auth import get_current_user
 from app.models import Item, Purchase
 from app.schemas import PurchaseCreate, PurchaseRead
 from app.services.pantry import refresh_pantry_item
@@ -41,7 +42,7 @@ def _to_response(purchase: Purchase) -> PurchaseRead:
 
 
 @import_router.post("/import", response_model=PurchaseImportRead)
-def import_purchase_history() -> PurchaseImportRead:
+def import_purchase_history(user_id: str = Depends(get_current_user)) -> PurchaseImportRead:
     """Provide the frontend's import-status contract until a source is connected.
 
     The current browser request contains neither a selected file nor source
@@ -53,17 +54,17 @@ def import_purchase_history() -> PurchaseImportRead:
 
 
 @router.post("", response_model=PurchaseRead, status_code=status.HTTP_201_CREATED)
-def create_purchase(payload: PurchaseCreate, db: Session = Depends(get_db)) -> PurchaseRead:
+def create_purchase(payload: PurchaseCreate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)) -> PurchaseRead:
     """Persist a purchase and create its canonical item when needed."""
 
-    item = db.scalar(select(Item).where(Item.name_key == _name_key(payload.item_name)))
+    item = db.scalar(select(Item).where(Item.user_id == user_id, Item.name_key == _name_key(payload.item_name)))
     if item is None:
-        item = Item(name=payload.item_name, name_key=_name_key(payload.item_name), default_unit=payload.unit)
+        item = Item(user_id=user_id, name=payload.item_name, name_key=_name_key(payload.item_name), default_unit=payload.unit)
         db.add(item)
         db.flush()
 
     purchase = Purchase(
-        item_id=item.id,
+        user_id=user_id, item_id=item.id,
         quantity=payload.quantity,
         unit=payload.unit,
         purchased_at=payload.purchased_at,
@@ -73,22 +74,22 @@ def create_purchase(payload: PurchaseCreate, db: Session = Depends(get_db)) -> P
     db.commit()
     db.refresh(purchase)
     purchase.item = item
-    refresh_pantry_item(db, item.id)
-    build_or_update_reminder_batch(db)
+    refresh_pantry_item(db, user_id, item.id)
+    build_or_update_reminder_batch(db, user_id)
     return _to_response(purchase)
 
 
 @router.put("/{purchase_id}", response_model=PurchaseRead)
-def update_purchase(purchase_id: int, payload: PurchaseCreate, db: Session = Depends(get_db)) -> PurchaseRead:
+def update_purchase(purchase_id: int, payload: PurchaseCreate, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)) -> PurchaseRead:
     """Update a purchase and refresh both affected pantry items."""
 
-    purchase = db.get(Purchase, purchase_id)
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id, Purchase.user_id == user_id))
     if purchase is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase not found")
     previous_item_id = purchase.item_id
-    item = db.scalar(select(Item).where(Item.name_key == _name_key(payload.item_name)))
+    item = db.scalar(select(Item).where(Item.user_id == user_id, Item.name_key == _name_key(payload.item_name)))
     if item is None:
-        item = Item(name=payload.item_name, name_key=_name_key(payload.item_name), default_unit=payload.unit)
+        item = Item(user_id=user_id, name=payload.item_name, name_key=_name_key(payload.item_name), default_unit=payload.unit)
         db.add(item)
         db.flush()
     purchase.item_id = item.id
@@ -99,25 +100,25 @@ def update_purchase(purchase_id: int, payload: PurchaseCreate, db: Session = Dep
     db.commit()
     db.refresh(purchase)
     purchase.item = item
-    refresh_pantry_item(db, previous_item_id)
+    refresh_pantry_item(db, user_id, previous_item_id)
     if item.id != previous_item_id:
-        refresh_pantry_item(db, item.id)
-    build_or_update_reminder_batch(db)
+        refresh_pantry_item(db, user_id, item.id)
+    build_or_update_reminder_batch(db, user_id)
     return _to_response(purchase)
 
 
 @router.delete("/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_purchase(purchase_id: int, db: Session = Depends(get_db)) -> None:
+def delete_purchase(purchase_id: int, db: Session = Depends(get_db), user_id: str = Depends(get_current_user)) -> None:
     """Remove an incorrectly logged purchase and recalculate its pantry item."""
 
-    purchase = db.get(Purchase, purchase_id)
+    purchase = db.scalar(select(Purchase).where(Purchase.id == purchase_id, Purchase.user_id == user_id))
     if purchase is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase not found")
     item_id = purchase.item_id
     db.delete(purchase)
     db.commit()
-    refresh_pantry_item(db, item_id)
-    build_or_update_reminder_batch(db)
+    refresh_pantry_item(db, user_id, item_id)
+    build_or_update_reminder_batch(db, user_id)
 
 
 @router.get("", response_model=list[PurchaseRead])
@@ -126,10 +127,11 @@ def list_purchases(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
 ) -> list[PurchaseRead]:
     """List purchases newest first, optionally for one case-insensitive item name."""
 
-    statement = select(Purchase).options(joinedload(Purchase.item)).order_by(Purchase.purchased_at.desc(), Purchase.id.desc())
+    statement = select(Purchase).options(joinedload(Purchase.item)).where(Purchase.user_id == user_id).order_by(Purchase.purchased_at.desc(), Purchase.id.desc())
     if item_name is not None:
         statement = statement.join(Purchase.item).where(Item.name_key == _name_key(item_name))
     purchases = db.scalars(statement.offset(offset).limit(limit)).all()
