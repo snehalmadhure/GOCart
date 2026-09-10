@@ -24,9 +24,11 @@ export const toUiPurchase = (purchase) => ({
 export const toUiPantryItem = (item) => ({
   id: String(item.item_id),
   name: item.item_name,
-  quantityRemaining: numberOr(item.estimated_quantity),
+  // An unknown estimate means the model needs more purchase history; it is
+  // not the same thing as an empty pantry.
+  quantityRemaining: item.estimated_quantity == null ? null : numberOr(item.estimated_quantity),
   unit: item.unit || 'unit',
-  consumptionRate: 0,
+  consumptionRate: item.status === 'unknown' ? null : 0,
   consumptionUnit: `${item.unit || 'unit'}/day`,
   daysRemaining: item.days_left == null ? Infinity : numberOr(item.days_left),
   predictedRunoutDate: dateOnly(item.run_out_at),
