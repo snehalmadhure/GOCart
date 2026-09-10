@@ -8,13 +8,24 @@ import { daysLabel, fullDate, quantity } from '../utils/formatters'
 import { useNavigate } from 'react-router-dom'
 import pantryGroceries from '../assets/pantry-groceries.png'
 import { GroceryImage } from '../utils/groceryImages'
+import { useAuth } from '../auth/AuthProvider'
 
 const filters = ['All', 'Low Stock', 'Restock Soon', 'Expiring Soon', 'Healthy']
+const displayNameFromUser = (user) => {
+ const suppliedName = user?.user_metadata?.full_name || user?.user_metadata?.name
+ if (suppliedName) return suppliedName
+ const localPart = user?.email?.split('@')[0] || 'there'
+ return localPart.split(/[._-]+/).filter(Boolean).map(part => `${part[0]?.toUpperCase() || ''}${part.slice(1)}`).join(' ')
+}
+const greetingForNow = () => {
+ const hour = new Date().getHours()
+ return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+}
 export default function PantryPage() {
- const { data: items, loading, error, refresh } = useAsyncData(pantryApi.getAll); const [filter, setFilter] = useState('All'); const [sort, setSort] = useState('Soonest to run out'); const [selected, setSelected] = useState(null); const navigate = useNavigate()
+ const { user } = useAuth(); const { data: items, loading, error, refresh } = useAsyncData(pantryApi.getAll); const [filter, setFilter] = useState('All'); const [sort, setSort] = useState('Soonest to run out'); const [selected, setSelected] = useState(null); const navigate = useNavigate()
  const filtered = useMemo(() => (items || []).filter(item => filter === 'All' || getPantryStatus(item).label === filter).sort((a, b) => sort === 'Item name' ? a.name.localeCompare(b.name) : sort === 'Quantity' ? a.quantityRemaining - b.quantityRemaining : sort === 'Recently updated' ? new Date(b.lastPurchaseDate) - new Date(a.lastPurchaseDate) : a.daysRemaining - b.daysRemaining), [items, filter, sort])
  const attention = filtered.filter(item => getPantryStatus(item).key !== 'healthy'); const covered = filtered.filter(item => getPantryStatus(item).key === 'healthy'); const allAttention = (items || []).filter(item => getPantryStatus(item).key !== 'healthy'); const expiring = (items || []).filter(item => getPantryStatus(item).key === 'expiring').length
- return <><PageTitle title="Good afternoon, Kashish." subtitle="Here’s what’s happening in your pantry." action={<button className="btn-secondary" onClick={refresh} aria-label="Refresh pantry"><RefreshCw size={17} /> Refresh</button>} />
+ return <><PageTitle title={`${greetingForNow()}, ${displayNameFromUser(user)}.`} subtitle="Here’s what’s happening in your pantry." action={<button className="btn-secondary" onClick={refresh} aria-label="Refresh pantry"><RefreshCw size={17} /> Refresh</button>} />
   {loading ? <LoadingCards count={3} /> : error ? <ErrorState title="Couldn't load your pantry." retry={refresh} /> : !items?.length ? <EmptyState icon="🧺" title="Your pantry is empty" action={<button className="btn-primary" onClick={() => navigate('/purchases')}>Log a Purchase</button>}>Start by logging your recent purchases. The agent will learn your consumption patterns and predict when you'll need to restock.</EmptyState> : <>
    <NextOrderPanel items={allAttention} onReview={() => navigate('/shopping-list')} />
    <PantryOutlook itemCount={items.length} attention={allAttention.length} healthy={items.length - allAttention.length} expiring={expiring} onAction={() => setFilter('Low Stock')} />
